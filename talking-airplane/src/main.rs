@@ -61,8 +61,11 @@ struct Data {
 
 fn report_data(s: &mut AppState, data: &Data) {
     let now = Instant::now();
+    let altitude_int = data.altitude.round() as i32;
     let last_altitude_thousands = (s.history.last_altitude as i32) / 1000;
-    let altitude_thousands = (data.altitude as i32) / 1000;
+    let altitude_thousands = altitude_int / 1000;
+    let altitude_to_nearest_500 = altitude_int - (altitude_int % 500);
+
     // In feet per minute
     let instantaneous_vert_speed = (data.altitude - s.history.last_altitude)
         / now.duration_since(s.history.last_time).as_secs_f64()
@@ -80,11 +83,10 @@ fn report_data(s: &mut AppState, data: &Data) {
     // not been updated.
 
     match s.history.timer {
-        None => { }
+        None => {}
         Some(t) => {
             if now >= t {
-                s.history.say_or_suppress(
-                    &mut s.voice_box, "Timer elapsed");
+                s.history.say_or_suppress(&mut s.voice_box, "Timer elapsed");
                 s.history.timer = None;
             }
         }
@@ -143,23 +145,38 @@ fn report_data(s: &mut AppState, data: &Data) {
     // 1,000 feet per second is either impossible, or just an initialization
     // error.
     match (
-        s.history.inferred_phase,
+        &mut s.history.inferred_phase,
         average_vert_speed < s.opts.descent_threshold,
         average_vert_speed > s.opts.climb_threshold,
     ) {
-        (FlightPhase::Cruise, true, _) => {
+        (FlightPhase::Cruise(_), true, _) => {
             s.history.inferred_phase = FlightPhase::Descent;
             s.voice_box.say("Started descent.");
         }
-        (FlightPhase::Cruise, _, true) => {
+        (FlightPhase::Cruise(_), _, true) => {
             s.history.inferred_phase = FlightPhase::Climb;
             s.voice_box.say("Climbing.");
         }
-        (FlightPhase::Cruise, false, false) => {
-            // Continuing cruise. Nothing to say.
+        (FlightPhase::Cruise(cruise_phase), false, false) => {
+            if (data.airspeed_indicated - cruise_phase.airspeed).abs() > 10.0
+                || (data.altitude - cruise_phase.altitude).abs() > 500.0
+            {
+                cruise_phase.airspeed = data.airspeed_indicated;
+                cruise_phase.altitude = data.altitude;
+                s.voice_box.say(&format!(
+                    "Now cruising at {} feet and {} knots.",
+                    altitude_to_nearest_500,
+                    data.airspeed_indicated.round() as i32
+                ));
+            } else {
+                // Continuing cruise. Nothing to say.
+            }
         }
         (_, false, false) => {
-            s.history.inferred_phase = FlightPhase::Cruise;
+            s.history.inferred_phase = FlightPhase::Cruise(CruisePhase {
+                airspeed: data.airspeed_indicated,
+                altitude: data.altitude,
+            });
             s.voice_box.say("Leveling off.");
         }
         _ => {
@@ -169,7 +186,7 @@ fn report_data(s: &mut AppState, data: &Data) {
 
     if last_altitude_thousands != altitude_thousands {
         match s.history.inferred_phase {
-            FlightPhase::Cruise => {}
+            FlightPhase::Cruise(_) => {}
             FlightPhase::Climb => {
                 s.voice_box
                     .say(&format!("Passing {} thousand feet.", altitude_thousands));
@@ -184,11 +201,17 @@ fn report_data(s: &mut AppState, data: &Data) {
     }
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq)]
 enum FlightPhase {
-    Cruise,
+    Cruise(CruisePhase),
     Climb,
     Descent,
+}
+
+#[derive(Debug, PartialEq)]
+struct CruisePhase {
+    airspeed: f64,
+    altitude: f64,
 }
 
 struct History {
@@ -198,7 +221,7 @@ struct History {
     average_vert_speed: moving_average::MovingAverage,
     minspeed_ever_exceeded: bool,
     inferred_phase: FlightPhase,
-    timer: Option<Instant>
+    timer: Option<Instant>,
 }
 
 impl History {
@@ -225,7 +248,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => None,
                 Some(mins) => Some(Instant::now() + Duration::from_secs(mins * 60)),
             },
-            inferred_phase: FlightPhase::Cruise,
+            inferred_phase: FlightPhase::Cruise(CruisePhase {
+                airspeed: 0.0,
+                altitude: 0.0,
+            }),
             last_altitude: 0.0,
             last_time: Instant::now(),
             last_warning: Instant::now(),
