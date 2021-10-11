@@ -1,8 +1,8 @@
 Talking Airplane
 ================
 
-Talking Airplane is a companion to Microsoft Flight Simulator, gives spoken
-feedback when various events occur. It is particularly handy when you are not
+Talking Airplane is a companion to Microsoft Flight Simulator that gives spoken
+feedback when certain events occur. It is particularly handy when you are not
 paying full attention, e.g., if you're running a long flight while doing other
 things around the house. These are some of the events that it can report:
 
@@ -14,8 +14,7 @@ things around the house. These are some of the events that it can report:
 **Note:** You must start Talking Airplane *before* you start Microsoft Flight
 Simulator.
 
-Talking Airplane is a command-line tool that takes several options on the
-command-line:
+Talking Airplane is a command-line tool that takes several options:
 
 ```
 USAGE:
