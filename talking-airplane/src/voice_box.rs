@@ -1,6 +1,8 @@
-use bindings::Windows::Media::{
-    Core::MediaSource, Playback::MediaPlayer, SpeechSynthesis::SpeechSynthesizer,
-};
+use std::thread::sleep;
+use std::time::Duration;
+use windows::Media::SpeechSynthesis::SpeechSynthesizer;
+use windows::Media::Playback::MediaPlayer;
+use windows::Media::Core::MediaSource;
 
 pub struct VoiceBox {
     synth: SpeechSynthesizer,
@@ -15,16 +17,13 @@ impl Default for VoiceBox {
     }
 }
 
-use std::thread::sleep;
-use std::time::Duration;
-
 impl VoiceBox {
     pub fn say(&mut self, text: &str) {
-        let op = SpeechSynthesizer::SynthesizeTextToStreamAsync(&self.synth, text).unwrap();
+        let op = self.synth.SynthesizeTextToStreamAsync(text).unwrap();
         let stream = op.get().unwrap();
         let source = MediaSource::CreateFromStream(&stream, stream.ContentType().unwrap()).unwrap();
-        MediaPlayer::SetSource(&self.player, &source).unwrap();
-        MediaPlayer::Play(&self.player).unwrap();
+        self.player.SetSource(&source).unwrap();
+        self.player.Play().unwrap();
         sleep(Duration::from_millis(2000));
     }
 }
